@@ -1,5 +1,4 @@
 #include "SpaceShip.h"
-#include "bullet.h"
 #include <vector>
 
 SpaceShip::SpaceShip(unsigned int damage, unsigned int maxHealth)
@@ -18,14 +17,18 @@ void SpaceShip::takeDamage(unsigned int Amount) {
     currentHealth -= Amount;
 }
 
-Vector2 SpaceShip::getPosition()
+const Vector2& SpaceShip::getPosition()
 {
     return position;
 }
 
-void SpaceShip::updatePosition(float newX, float newY)
+void SpaceShip::updatePosition(const Vector2& newPos)
 {
-    position.x = newX;
-    position.y = newY;
+    position = newPos;
+}
+
+const Vector2& SpaceShip::getBulletSpawnPosition()
+{
+    return bulletSpawnPosition;
 }
 
