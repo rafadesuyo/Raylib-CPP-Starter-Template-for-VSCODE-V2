@@ -4,19 +4,43 @@
 #include "Bullet.h"
 #include <cstddef>
 #include <memory>
+#include <map>
+#include "raymath.h"
 
 const int winSizeX = 800;
 const int windSizeY = 800;
 
+const std::map<int,Bullet> PrewarmBulletPool()
+{
+    std::map<int,Bullet> pool;
+
+    for(int i = 0; i < 30; ++i)
+    {
+        //Bullet bullet (1);
+        //pool[i] = bullet;
+    }
+    return pool;
+}
+
 
 int main()
 {
+    //Player ship
     SpaceShip ship(10,20);
+    float rotationAngle = 90.0;
     ship.setDamage(1500);
+    Vector2 shipPosition = ship.getPosition();
 
+    //Bullets
+    //std::map<int,Bullet> bulletPool = PrewarmBulletPool();
+   
     InitWindow(winSizeX,windSizeY, "Window");
     InitAudioDevice();
     SetTargetFPS(60);
+
+    //Sprites
+    Texture2D spaceShipSprite = LoadTexture("resources/Spaceship.png");
+    Vector2 origin = { spaceShipSprite.width / 2.0f, spaceShipSprite.height / 2.0f };
 
     //Audio
     Sound sfxShoot = LoadSound("resources/shoot.wav");
@@ -24,44 +48,44 @@ int main()
     //Sound sfxDie = LoadSound("resources/shoot.wav");
 
     //Game loop
-
-    //Pool of objects
-    std::vector<std::unique_ptr<Bullet>> bulletList;
-
     while(WindowShouldClose() == false)
     {
-        Vector2 shipPosition = ship.getPosition();
-        
+        float movementSpeed = 100.0f * GetFrameTime();
+
+       Vector2 direction = { //-90 is the rotation of the sprite
+            cosf((rotationAngle - 90.0f) * DEG2RAD),
+            sinf((rotationAngle - 90.0f) * DEG2RAD)
+        };
+
         // Handle events
         if(IsKeyDown(KEY_RIGHT))
         {
-            shipPosition.x += 3.0;
-            ship.updatePosition(shipPosition);
+            rotationAngle += 3.0;
         }
 
         if(IsKeyDown(KEY_LEFT))
         {
-            shipPosition.x -= 3.0;
-            ship.updatePosition(shipPosition);
+            rotationAngle -= 3.0;
         }
 
         if(IsKeyDown(KEY_UP))
         {
-            shipPosition.y -= 3.0;
-            ship.updatePosition(shipPosition);
+            shipPosition.x += direction.x * movementSpeed;
+            shipPosition.y += direction.y * movementSpeed;
+            //ship.updatePosition(shipPosition);
         }
 
         if(IsKeyDown(KEY_DOWN))
         {
-            shipPosition.y += 3.0;
-            ship.updatePosition(shipPosition);
+            shipPosition.x += direction.x * movementSpeed;
+            shipPosition.y += direction.y * movementSpeed;
+            //ship.updatePosition(shipPosition);
         }
 
 
         //Spawn a bullet
         if(IsKeyPressed(KEY_SPACE))
         {
-            bulletList.push_back(std::make_unique<Bullet>(1,ship.getBulletSpawnPosition()));
             PlaySound(sfxShoot);
         }
 
@@ -73,10 +97,15 @@ int main()
         ClearBackground(BLACK);
 
         //Drawing bullets
-        for (const auto& bullet : bulletList)
-             DrawCircle(bullet->GetBulletPosition().x, bullet->GetBulletPosition().y, 20, PURPLE);
 
-        DrawCircle(shipPosition.x,shipPosition.y,20, WHITE);
+        DrawTexturePro(
+                spaceShipSprite,Rectangle{ 0, 0, (float)spaceShipSprite.width, (float)spaceShipSprite.height },
+                Rectangle{ shipPosition.x, shipPosition.y, (float)spaceShipSprite.width, (float)spaceShipSprite.height },
+                origin,
+                rotationAngle,
+                WHITE
+            );
+
         EndDrawing();
     }
 

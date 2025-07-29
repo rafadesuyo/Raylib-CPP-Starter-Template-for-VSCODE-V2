@@ -32,3 +32,8 @@ const Vector2& SpaceShip::getBulletSpawnPosition()
     return bulletSpawnPosition;
 }
 
+const float& SpaceShip::getRotation()
+{
+    return rotation;
+}
+

@@ -1,8 +1,8 @@
 #include "bullet.h"
 #include <raylib.h>
 
-Bullet::Bullet(unsigned int Damage,Vector2 spawnPosition)
-    : Damage(Damage), spawnPosition(spawnPosition)
+Bullet::Bullet(unsigned int Damage)
+    : Damage(Damage)
 {}
 
 void Bullet::UpdateBulletPos(Vector2 newPosition){
