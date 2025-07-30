@@ -18,6 +18,6 @@ private:
     unsigned int maxHealth;
     unsigned int currentHealth;
     float rotation;
-    Vector2 position = {0.5f,0.5f};
+    Vector2 position = {400.0f,400.0f};
     Vector2 bulletSpawnPosition = {position.x, position.y};
 };
