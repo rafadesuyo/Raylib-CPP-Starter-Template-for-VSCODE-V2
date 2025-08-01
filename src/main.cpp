@@ -86,7 +86,7 @@ int main()
         }
 
         //movement
-        for(auto& bullet: activeBullets)
+        for(Bullet& bullet: activeBullets)
         {
             //Manipulate the bullet
             Vector2 oldBulletPos = bullet.GetBulletPosition();
