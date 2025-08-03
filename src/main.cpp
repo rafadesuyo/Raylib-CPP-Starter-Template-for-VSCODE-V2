@@ -8,8 +8,15 @@
 #include "raymath.h"
 #include <queue>
 
+// Window
 const int winSizeX = 800;
 const int windSizeY = 800;
+
+// Boundaries
+const Rectangle rightRectangle = { winSizeX -50, 0, 50.0,windSizeY};
+const Rectangle leftRectangle = {0, 0, 50.0,windSizeY};
+const Rectangle topRectangle = {0, 0, winSizeX,50};
+const Rectangle bottomRectangle = {0, windSizeY - 50, winSizeX,50};
 
 const std::queue<Bullet> PrewarmBulletPool()
 {
@@ -139,6 +146,13 @@ int main()
                 WHITE
             );
 
+        //Debug bondaries drawing
+        DrawRectangleRec(rightRectangle, WHITE);
+        DrawRectangleRec(leftRectangle, WHITE);
+        DrawRectangleRec(topRectangle, WHITE);
+        DrawRectangleRec(bottomRectangle, WHITE);
+
+        //Reset flow
         EndDrawing();
     }
 
