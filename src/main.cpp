@@ -1,5 +1,6 @@
 #include <raylib.h>
 #include "SpaceShip.h"
+#include <iostream>
 #include <vector>
 #include "Bullet.h"
 #include <cstddef>
@@ -7,6 +8,8 @@
 #include <map>
 #include "raymath.h"
 #include <queue>
+#include <list>
+#include "asteroid.h"
 
 // Window
 const int winSizeX = 800;
@@ -17,29 +20,62 @@ const Rectangle rightRectangle = { winSizeX -50, 0, 50.0,windSizeY};
 const Rectangle leftRectangle = {0, 0, 50.0,windSizeY};
 const Rectangle topRectangle = {0, 0, winSizeX,50};
 const Rectangle bottomRectangle = {0, windSizeY - 50, winSizeX,50};
+const std::vector<Rectangle> BoundariesList =  {rightRectangle, leftRectangle, topRectangle, bottomRectangle};
 
-const std::queue<Bullet> PrewarmBulletPool()
+// Asteroid spawn positions
+const Vector2 spawn1 = {winSizeX, 0.0};
+const Vector2 spawn2 = {0.0, windSizeY};
+const std::vector<Vector2> asteroidSpawnPositions = {spawn1, spawn2};
+
+std::queue<std::shared_ptr<Bullet>> PrewarmBulletPool()
 {
-    std::queue<Bullet> bulletPool;
+    std::queue<std::shared_ptr<Bullet>> bulletPool;
 
-    for(int i = 0; i < 5; ++i)
+    for (int i = 0; i < 30; ++i)
     {
-        bulletPool.push(Bullet(1));
+        bulletPool.push(std::make_shared<Bullet>(1));
     }
     return bulletPool;
 }
+
+
+std::queue<std::shared_ptr<Asteroid>> PrewarmAsteroidPool()
+{
+    std::queue<std::shared_ptr<Asteroid>> asteroidPool;
+
+    for (int i = 0; i < 30; ++i)
+    {
+        asteroidPool.push(std::make_shared<Asteroid>(1));
+    }
+    return asteroidPool;
+}
+
+void TryToSpawnAsteroid(std::list<std::shared_ptr<Asteroid>> activeAsteroids,  std::queue<std::shared_ptr<Asteroid>> inactiveAsteroidPool)
+{
+   // bool maximumAsteroidsSpawned = (inactiveAsteroidPool.size() = 0);
+}
+
 
 int main()
 {
     //Player ship
     SpaceShip ship(10,20);
     float rotationAngle = 90.0;
-    ship.setDamage(1500);
+
+    // Ship Position
     Vector2 shipPosition = ship.getPosition();
+    const float damping = 0.99f;
+    Vector2 velocity;
+    float currentTrustForce = 0.0f;
+    float maximumTrustForce = 1.0f;
 
     //Bullets queue
-    std::queue<Bullet> bulletPool = PrewarmBulletPool();
-    std::vector<Bullet> activeBullets;
+    std::queue<std::shared_ptr<Bullet>> bulletPool = PrewarmBulletPool();
+    std::list<std::shared_ptr<Bullet>> activeBullets;
+
+    //Asteroids queue
+    std::queue<std::shared_ptr<Asteroid>> asteroidPool = PrewarmAsteroidPool();
+    std::list<std::shared_ptr<Asteroid>> activeAsteroids;
 
     InitWindow(winSizeX,windSizeY, "Window");
     InitAudioDevice();
@@ -59,8 +95,6 @@ int main()
     //Game loop
     while(WindowShouldClose() == false)
     {
-        float movementSpeed = 100.0f * GetFrameTime();
-
         //direction is made out of the rotationAngle 90 in this case, made out of cosf and sinf
         //Represents the blue line vector
 
@@ -82,39 +116,50 @@ int main()
 
         if(IsKeyDown(KEY_UP))
         {
-            shipPosition.x += direction.x * movementSpeed;
-            shipPosition.y += direction.y * movementSpeed;
+            if(currentTrustForce < maximumTrustForce){
+                currentTrustForce += 10.0f * GetFrameTime();
+            }
+
+            velocity += direction * currentTrustForce;
         }
 
-        if(IsKeyDown(KEY_DOWN))
-        {
-            shipPosition.x += direction.x * movementSpeed;
-            shipPosition.y += direction.y * movementSpeed;
-        }
+        // Inertia movement even if not thrusting
+        shipPosition += velocity * GetFrameTime();
 
-        //movement
-        for(Bullet& bullet: activeBullets)
+        //Damp velocities
+        velocity *= damping;
+        currentTrustForce *= damping;
+
+        // movement of bullets
+        for(auto& bullet: activeBullets)
         {
             //Manipulate the bullet
-            Vector2 oldBulletPos = bullet.GetBulletPosition();
+            Vector2 oldBulletPos = bullet->GetBulletPosition();
 
             Vector2 bulletDirection = {
-                cosf((bullet.rotation - 90.0f) * DEG2RAD),
-                sinf((bullet.rotation  - 90.0f) * DEG2RAD)
+                cosf((bullet->rotation - 90.0f) * DEG2RAD),
+                sinf((bullet->rotation  - 90.0f) * DEG2RAD)
             };
-            oldBulletPos.x += bulletDirection.x * bullet.speed;
-            oldBulletPos.y += bulletDirection.y * bullet.speed;
+            oldBulletPos.x += bulletDirection.x * bullet->speed;
+            oldBulletPos.y += bulletDirection.y * bullet->speed;
 
-            bullet.UpdateBulletPos(oldBulletPos);
+            bullet->UpdateBulletPos(oldBulletPos);
+            bullet->UpdateCollisionRectanglePos(bullet->GetBulletPosition());
         }
 
         //Spawn a bullet
         if(IsKeyPressed(KEY_SPACE))
         {
             if (!bulletPool.empty()) {
-                Bullet bullet = bulletPool.front();
-                bullet.rotation = rotationAngle;
-                bullet.UpdateBulletPos({shipPosition.x, shipPosition.y});
+
+                //Update bullet pool pos
+                auto bullet = bulletPool.front();
+
+                bullet->rotation = rotationAngle;
+                bullet->UpdateBulletPos({shipPosition.x, shipPosition.y}); // so weird just use a vector2
+
+                //Update bullet collision 
+                bullet->UpdateCollisionRectanglePos(bullet->GetBulletPosition());
 
                 //
                 activeBullets.push_back(bullet);
@@ -124,7 +169,21 @@ int main()
         }
 
         //handle collision
-
+        for(auto bullet = activeBullets.begin(); bullet != activeBullets.end();)
+        {
+            bool collided = false;
+            for (const Rectangle& boundary : BoundariesList)
+            {
+                if (CheckCollisionRecs((*bullet)->GetBulletCollisionRectangle(), boundary))
+                {
+                    bulletPool.push(*bullet);
+                    bullet = activeBullets.erase(bullet);
+                    collided = true;
+                    break;
+                }
+            }
+            if (!collided) ++bullet;
+        }
 
         //draw
         BeginDrawing();
@@ -133,7 +192,9 @@ int main()
         // Draw Bullets
         for(auto& bullet: activeBullets)
         {
-            DrawTextureV(bulletSprite, bullet.GetBulletPosition(), WHITE);
+            DrawTextureV(bulletSprite, bullet->GetBulletPosition(), WHITE);
+           
+            // debug DrawRectangleRec(bullet->GetBulletCollisionRectangle(), WHITE);
         }
 
         // Draw spaceship
@@ -147,10 +208,19 @@ int main()
             );
 
         //Debug bondaries drawing
-        DrawRectangleRec(rightRectangle, WHITE);
-        DrawRectangleRec(leftRectangle, WHITE);
-        DrawRectangleRec(topRectangle, WHITE);
-        DrawRectangleRec(bottomRectangle, WHITE);
+        //DrawRectangleRec(rightRectangle, WHITE);
+        //DrawRectangleRec(leftRectangle, WHITE);
+        //DrawRectangleRec(topRectangle, WHITE);
+        //DrawRectangleRec(bottomRectangle, WHITE);
+
+        char buffer1[64];
+        char buffer2[32];
+        sprintf(buffer1, "Movement Speed: X: %.2f Y: %.2f", velocity.x, velocity.y);
+        sprintf(buffer2, "Thrust: %.2f", currentTrustForce);
+
+
+        DrawText(buffer1, 0, 0, 10, WHITE);
+        DrawText(buffer2, 0, 10, 10, WHITE);
 
         //Reset flow
         EndDrawing();
