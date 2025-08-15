@@ -10,22 +10,60 @@
 #include <queue>
 #include <list>
 #include "asteroid.h"
+#include <cstdlib> 
+#include <ctime>   
+#include <random>
 
 // Window
 const int winSizeX = 800;
 const int windSizeY = 800;
 
 // Boundaries
-const Rectangle rightRectangle = { winSizeX -50, 0, 50.0,windSizeY};
-const Rectangle leftRectangle = {0, 0, 50.0,windSizeY};
-const Rectangle topRectangle = {0, 0, winSizeX,50};
-const Rectangle bottomRectangle = {0, windSizeY - 50, winSizeX,50};
-const std::vector<Rectangle> BoundariesList =  {rightRectangle, leftRectangle, topRectangle, bottomRectangle};
+const Rectangle bulletBoundaryRightRectangle  = { winSizeX - 50, 0, 50.0f, windSizeY };
+const Rectangle bulletBoundaryLeftRectangle   = { 0, 0, 50.0f, windSizeY };
+const Rectangle bulletBoundaryTopRectangle    = { 0, 0, winSizeX, 50.0f };
+const Rectangle bulletBoundaryBottomRectangle = { 0, windSizeY - 50, winSizeX, 50.0f };
+
+const std::vector<Rectangle> BulletBoundariesList = {
+    bulletBoundaryRightRectangle,
+    bulletBoundaryLeftRectangle,
+    bulletBoundaryTopRectangle,
+    bulletBoundaryBottomRectangle
+};
+
+// Asteroid Recycling boundaries
+const float AsteroidBoundariesOffset = 20.0f;
+
+const Rectangle asteroidBoundaryRightRectangle  = { winSizeX - 5.0f, 0, 10.0f, windSizeY };
+const Rectangle asteroidBoundaryLeftRectangle   = { 0, 0, 5.0f, windSizeY };
+const Rectangle asteroidBoundaryTopRectangle    = { 0, 0, winSizeX, + 5.0f };
+const Rectangle asteroidBoundaryBottomRectangle = { 0, windSizeY - 5.0f , winSizeX , 10.0f };
+
+const std::vector<Rectangle> AsteroidBoundariesList = {
+    asteroidBoundaryRightRectangle,
+    asteroidBoundaryLeftRectangle,
+    asteroidBoundaryTopRectangle,
+    asteroidBoundaryBottomRectangle
+};
 
 // Asteroid spawn positions
 const Vector2 spawn1 = {winSizeX, 0.0};
 const Vector2 spawn2 = {0.0, windSizeY};
+// Spawn array
 const std::vector<Vector2> asteroidSpawnPositions = {spawn1, spawn2};
+
+enum class Asteroid_State{big,medium,small};
+const unsigned int maxSpawnAsteroids = 40;
+unsigned int currentSpawnedAsteroidsAmount = 0;
+
+
+int getRandomNumber(int min, int max) {
+    static std::random_device rd;
+    static std::mt19937 gen(rd());
+    std::uniform_int_distribution<> distrib(min, max);
+
+    return distrib(gen);
+}
 
 std::queue<std::shared_ptr<Bullet>> PrewarmBulletPool()
 {
@@ -50,17 +88,37 @@ std::queue<std::shared_ptr<Asteroid>> PrewarmAsteroidPool()
     return asteroidPool;
 }
 
-void TryToSpawnAsteroid(std::list<std::shared_ptr<Asteroid>> activeAsteroids,  std::queue<std::shared_ptr<Asteroid>> inactiveAsteroidPool)
+void TryToSpawnAsteroid(std::list<std::shared_ptr<Asteroid>> &activeAsteroids,  std::queue<std::shared_ptr<Asteroid>> &inactiveAsteroidPool)
 {
-   // bool maximumAsteroidsSpawned = (inactiveAsteroidPool.size() = 0);
+    if(activeAsteroids.size() >= maxSpawnAsteroids){
+        return;
+    }
+
+    //Random chance of spawning an asteroid
+    int chanceOfSpawning = 1;
+    if (rand() % 100 < chanceOfSpawning) 
+    {
+        //randomize spawn pos
+        auto asteroid = inactiveAsteroidPool.front();
+        asteroid->rotation = getRandomNumber(0, 90);
+        activeAsteroids.push_back(asteroid);
+        inactiveAsteroidPool.pop();
+        currentSpawnedAsteroidsAmount++;
+    }
 }
 
 
 int main()
 {
+    srand(time(NULL));
+
     //Player ship
     SpaceShip ship(10,20);
     float rotationAngle = 90.0;
+    
+
+    //data
+    int currentScore = 0;
 
     // Ship Position
     Vector2 shipPosition = ship.getPosition();
@@ -84,12 +142,14 @@ int main()
     //Loading Sprites
     Texture2D spaceShipSprite = LoadTexture("resources/Spaceship.png");
     Texture2D bulletSprite = LoadTexture("resources/bullet.png");
+    Texture2D asteroidSprite = LoadTexture("resources/rock_big.png");
 
     Vector2 anchorPoint = { spaceShipSprite.width / 2.0f, spaceShipSprite.height / 2.0f }; //origin in the center is equals to half of the size of it
 
     //Audio
     Sound sfxShoot = LoadSound("resources/shoot.wav");
-    //Sound sfxHitTarget = LoadSound("resources/shoot.wav");
+    Sound sfxHitTarget = LoadSound("resources/hit.wav");
+    Sound throtle = LoadSound("resources/throtle.wav");
     //Sound sfxDie = LoadSound("resources/shoot.wav");
 
     //Game loop
@@ -97,6 +157,8 @@ int main()
     {
         //direction is made out of the rotationAngle 90 in this case, made out of cosf and sinf
         //Represents the blue line vector
+
+        TryToSpawnAsteroid(activeAsteroids, asteroidPool);
 
         Vector2 direction = { //-90 is the default rotation of the sprite
                 cosf((rotationAngle - 90.0f) * DEG2RAD),
@@ -121,6 +183,11 @@ int main()
             }
 
             velocity += direction * currentTrustForce;
+            if(!IsSoundPlaying(throtle))
+            {
+                PlaySound(throtle);
+            }
+            
         }
 
         // Inertia movement even if not thrusting
@@ -129,6 +196,22 @@ int main()
         //Damp velocities
         velocity *= damping;
         currentTrustForce *= damping;
+
+        // Movement of asteroids
+        for(auto& asteroid: activeAsteroids)
+        {
+            Vector2 oldAsteroidPos = asteroid->GetPosition();
+
+            Vector2 asteroidDirection = {
+                cosf((asteroid->rotation) * DEG2RAD),
+                sinf((asteroid->rotation) * DEG2RAD)
+            };
+            oldAsteroidPos.x += asteroidDirection.x * asteroid->speed;
+            oldAsteroidPos.y += asteroidDirection.y * asteroid->speed;
+
+            asteroid->updateAsteroidPosition(oldAsteroidPos);
+            
+        }
 
         // movement of bullets
         for(auto& bullet: activeBullets)
@@ -169,20 +252,55 @@ int main()
         }
 
         //handle collision
-        for(auto bullet = activeBullets.begin(); bullet != activeBullets.end();)
+        for (auto bullet = activeBullets.begin(); bullet != activeBullets.end();)
         {
             bool collided = false;
-            for (const Rectangle& boundary : BoundariesList)
+
+            // Check boundaries
+            for (const Rectangle& boundary : BulletBoundariesList)
             {
                 if (CheckCollisionRecs((*bullet)->GetBulletCollisionRectangle(), boundary))
                 {
-                    bulletPool.push(*bullet);
-                    bullet = activeBullets.erase(bullet);
                     collided = true;
                     break;
                 }
             }
-            if (!collided) ++bullet;
+
+            //check asteroids
+            if (!collided)
+            {
+                for (auto asteroid = activeAsteroids.begin(); asteroid != activeAsteroids.end();)
+                {
+                    if (CheckCollisionRecs((*bullet)->GetBulletCollisionRectangle(), (*asteroid)->GetCollisionBox()))
+                    {
+                        collided = true;
+                        PlaySound(sfxHitTarget);
+
+                        //Return asteroid to pool
+                        asteroidPool.push(*asteroid);
+                        asteroid = activeAsteroids.erase(asteroid); // safe erase
+
+                        //ADD SCORE
+                        currentScore += 100;
+                        continue; // skip asteroid++ since erase advanced it
+                    }
+                    else
+                    {
+                        ++asteroid;
+                    }
+                }
+            }
+
+            // Erase 
+            if (collided)
+            {
+                bulletPool.push(*bullet);
+                bullet = activeBullets.erase(bullet);
+            }
+            else
+            {
+                ++bullet;
+            }
         }
 
         //draw
@@ -193,9 +311,16 @@ int main()
         for(auto& bullet: activeBullets)
         {
             DrawTextureV(bulletSprite, bullet->GetBulletPosition(), WHITE);
-           
             // debug DrawRectangleRec(bullet->GetBulletCollisionRectangle(), WHITE);
         }
+
+
+        for(auto& bullet: activeAsteroids)
+        {
+            DrawTextureV(asteroidSprite, bullet->GetPosition(), WHITE);
+            // debug DrawRectangleRec(bullet->GetBulletCollisionRectangle(), WHITE);
+        }
+
 
         // Draw spaceship
         DrawTexturePro(
@@ -208,19 +333,25 @@ int main()
             );
 
         //Debug bondaries drawing
-        //DrawRectangleRec(rightRectangle, WHITE);
-        //DrawRectangleRec(leftRectangle, WHITE);
-        //DrawRectangleRec(topRectangle, WHITE);
-        //DrawRectangleRec(bottomRectangle, WHITE);
+        for(Rectangle Item : AsteroidBoundariesList)
+        {
+            DrawRectangleRec(Item,RED);
+        }
 
         char buffer1[64];
         char buffer2[32];
+        char buffer3[64];
+        char buffer4[64];
         sprintf(buffer1, "Movement Speed: X: %.2f Y: %.2f", velocity.x, velocity.y);
         sprintf(buffer2, "Thrust: %.2f", currentTrustForce);
+        sprintf(buffer3, "Spawned Asteroid Amount: %i", currentSpawnedAsteroidsAmount);
+        sprintf(buffer4, "SCORE: %i", currentScore);
 
 
         DrawText(buffer1, 0, 0, 10, WHITE);
         DrawText(buffer2, 0, 10, 10, WHITE);
+        DrawText(buffer3, 0, 20, 10, WHITE);
+        DrawText(buffer4, 0, 30, 10, WHITE);
 
         //Reset flow
         EndDrawing();
